@@ -1,20 +1,55 @@
-cmake_minimum_required(VERSION 3.0.0)
+cmake_minimum_required(VERSION 3.10)
 project(Boost-CMake)
 
-option(BOOST_DOWNLOAD_TO_BINARY_DIR "Prefer downloading Boost to the binary directory instead of source directory" OFF)
-option(BOOST_DISABLE_TESTS "Do not build test targets, even if building standalone" OFF)
+if(NOT BOOST_URL)
+  set(BOOST_URL "https://dl.bintray.com/boostorg/release/1.72.0/source/boost_1_72_0.tar.bz2")
+endif()
 
-set(BOOST_URL "https://github.com/Orphis/boost-cmake/releases/download/v1.67.0/boost_1_67_0.tar.xz" CACHE STRING "Boost download URL")
-set(BOOST_URL_SHA256 "4256a98911fbc943f7d97aab5f14f2ecde5341d90c5c5441696b7d99425af8fd" CACHE STRING "Boost download URL SHA256 checksum")
-set(BOOST_ARCHIVE_DIRECTORY "" CACHE DIRECTORY "Use the specified local directory to search for boost archives instead of downloading them" )
+if(NOT BOOST_URL_MIRROR)
+  set(BOOST_URL_MIRROR "https://sourceforge.net/projects/boost/files/boost/1.72.0/boost_1_72_0.tar.bz2")
+endif()
+
+if(NOT BOOST_SHA256)
+  set(BOOST_SHA256 "59c9b274bc451cf91a9ba1dd2c7fdcaf5d60b1b3aa83f2c9fa143417cc660722")
+endif()
+
+if(NOT BOOST_LIBS)
+  set(BOOST_LIBS
+    header
+    atomic
+    chrono
+    container
+    context
+    #coroutine
+    date_time
+    exception
+    #fiber
+    filesystem
+    #graph
+    iostreams
+    #locale
+    #log
+    math
+    #mpi
+    #graph_parallel # depends on mpi, so needs to be put after it
+    program_options
+    #python # complex module
+    #random
+    regex
+    serialization
+    #signals
+    system
+    test
+    thread
+    timer
+    #type_erasure
+    #wave
+  )
+endif()
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
 include(DownloadBoost)
-
-message(STATUS "Boost found: ${BOOST_VERSION} ${BOOST_SOURCE}")
-
-include(StandaloneBuild)
 include(PlatformDetect)
 include(AddBoostLib)
 include(AddBoostTest)
@@ -27,61 +62,26 @@ if(USE_ANDROID)
   set(CMAKE_ASM_COMPILER_TARGET "${CMAKE_CXX_COMPILER_TARGET}")
 endif()
 
-set(BOOST_LIBS_REQUIRED
-  # Header only libs
-  header
-)
-set(BOOST_LIBS_OPTIONAL
-  # Compiled libs
-  atomic
-  chrono
-  container
-  context
-  coroutine
-  date_time
-  exception
-  fiber
-  filesystem
-  graph
-  iostreams
-  locale
-  log
-  math
-  mpi
-  graph_parallel # depends on mpi, so needs to be put after it
-  program_options
-  #python # complex module
-  random
-  regex
-  serialization
-  signals
-  system
-  test
-  thread
-  timer
-  type_erasure
-  wave
-)
-
-foreach(lib ${BOOST_LIBS_REQUIRED})
+foreach(lib ${BOOST_LIBS})
   include("libs/${lib}.cmake")
 endforeach()
 
-foreach(lib ${BOOST_LIBS_OPTIONAL})
-  # In case only a subset of modules is available (eg. after using bcp)
-  if(EXISTS "${BOOST_SOURCE}/libs/${lib}")
-    include("libs/${lib}.cmake")
-  endif()
-endforeach()
+# Compilation options required by all platforms
+set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS $<$<CONFIG:Release>:BOOST_DISABLE_ASSERT>)
+set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_SYSTEM_NO_DEPRECATED)
+set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_THREAD_VERSION=4)
+set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_THREAD_USES_CHRONO)
+set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_THREAD_PROVIDES_EXECUTORS)
 
-# TODO: Move those to option() calls in the right file
-if(NOT BOOST_STANDALONE)
-  # Compilation options required by all platforms
-  set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS $<$<CONFIG:Release>:BOOST_DISABLE_ASSERT>)
-  set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_SYSTEM_NO_DEPRECATED)
-  set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_THREAD_VERSION=4)
-  set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_THREAD_USES_CHRONO)
-  set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_THREAD_PROVIDES_EXECUTORS)
+# make boost scoped_lock available as a nested class of mutex
+set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_THREAD_PROVIDES_NESTED_LOCKS)
+# configure boost for manual linking libraries
+set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_ALL_NO_LIB)
+# suppress boost compiler version check warnings
+set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_DEFINITIONS BOOST_CONFIG_SUPPRESS_OUTDATED_MESSAGE)
+
+if(UNIX)
+  set_property(TARGET Boost::boost APPEND PROPERTY INTERFACE_COMPILE_OPTIONS -Wno-unused-local-typedefs)
 endif()
 
 if(USE_ANDROID)
